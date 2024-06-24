@@ -1,0 +1,100 @@
+import requests as rq
+from bs4 import BeautifulSoup as bs
+from dataclasses import dataclass
+import time
+import logging
+
+
+@dataclass()
+class Article:
+    headline: str = ""
+    authors: str = ""
+    annotation: str = ""
+
+
+# Функция для извлечения информации со страницы
+def get_inf(link, keywords):
+    full_inf = []
+    try:
+        res = rq.get(url=link)
+        cont = res.content
+        soup = bs(cont, 'html.parser')
+
+        articles_html = soup.find_all('article', {'class': 'css-1l4spti'})
+
+        for article_html in articles_html:
+
+            article = Article()
+
+            # Поиск заголовка
+            headline = article_html.find('h3', {'class': 'css-1j88qqx e15t083i0'})
+            if headline:
+                article.headline = headline.text
+
+            # Поиск аннотации (получение текста из тега <p>)
+            annotation = article_html.find('p', {'class': 'css-1pga48a e15t083i1'})
+            if annotation:
+                article.annotation = annotation.text
+
+            # Поиск ключевых слов в заголовке
+            find_text = article.headline + article.annotation
+            if not any(keyword in find_text.lower() for keyword in keywords):
+                continue
+
+            # Поиск авторов (изменение селектора)
+            authors = article_html.find('span', {'class': 'css-1n7hynb'})
+            if authors:
+                authors_text = authors.text
+                article.authors = authors_text.replace(',&nbsp;', '').replace('<span>and</span>', ',')
+
+            full_inf.append(article)
+
+    except Exception as e:
+        print(f"Error fetching or parsing article from {link}: {e}")
+
+    return full_inf
+
+
+# Основной блок
+if __name__ == "__main__":  # Условие
+
+    url = "https://www.nytimes.com/section/politics"  # URL The New York Times
+
+    # Создаем объект логгера
+    logger = logging.getLogger('articles_logger')
+
+    # Устанавливаем уровень логирования
+    logger.setLevel(logging.INFO)
+
+    # Создаем обработчик для вывода сообщений в файл
+    file_handler = logging.FileHandler('articles.log', encoding='utf-8')
+
+    # Настройка формата сообщений
+    formatter = logging.Formatter('%(asctime)s - %(message)s')
+    file_handler.setFormatter(formatter)
+
+    # Добавляем обработчик в логгер
+    logger.addHandler(file_handler)
+
+    keywords = ["democratic", "republican", "trump", "biden"]
+    check = set()
+    end_time = time.time() + 4 * 60 * 60
+
+    logger.info("Запуск поиска")  # в: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
+
+    logging_articles = get_inf(url, keywords)
+
+    # если нужны только новые статьи
+
+    while time.time() < end_time:
+
+        articles = get_inf(url, keywords)
+        for article in articles:
+            if article not in logging_articles:
+                logging_articles.append(article)
+                logger.info(
+                    f"Авторы: '{article.authors}'; Заголовок: '{article.headline}'; Аннотация: '{article.annotation}'")
+
+        time.sleep(180)
+
+    logger.info("Скрипт завершен")  # в: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
